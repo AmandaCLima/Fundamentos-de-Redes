@@ -2,6 +2,17 @@
 
 Projeto da disciplina **Fundamentos de Redes de Computadores (2026.1)**.
 
+---
+
+## Grupo
+
+### Amanda Lima
+### Diego Juan
+### Jaubert Gouveia 
+### Silvanio Assunção 
+
+---
+
 ## Visão Geral
 
 O **AuctionCIn** é um sistema de leilão multiusuário que permite que vários clientes disputem itens em tempo real através de uma arquitetura cliente-servidor.
