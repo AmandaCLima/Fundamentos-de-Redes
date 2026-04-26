@@ -90,4 +90,14 @@ Envio de arquivos:
 - `.png`
 - `.jpg`
 
+
+## Como rodar?
+
+Inicie o venv
+
+Abra 2 terminais (Cliente - Servidor) no caminho: /Fundamentos-de-Redes/projeto_redes/Etapa1
+
+Para o servidor rode: python3 -c "from servidor import server; server()"
+Para o cliente rode: python3 -c "from client import client; client()"
+
 ---
