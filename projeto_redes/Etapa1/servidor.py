@@ -26,7 +26,7 @@ def servidor(host='localhost', port=5000):
 
         print(f"Recebendo: {nome_arquivo} -> Salvando como: {nome_final}")
 
-        # 2. Loop de recebimento do conteúdo
+        # Loop de recebimento do conteúdo
         with open(caminho_salvamento, 'wb') as f:
             while True:
                 packet, _ = sock.recvfrom(BUFFER_SIZE)
