@@ -31,12 +31,16 @@ def cliente(host='localhost', port=5000):
         print("Erro: Arquivo não encontrado na pasta Arquivos/Client.")
         return 
 
-    # O encode transforma a string em bytes para envio
-    sock.sendto(nome_alvo.encode(), endereco_servidor)
+    # Obtém o tamanho exato do arquivo em bytes para o novo protocolo
+    tamanho_arquivo = os.path.getsize(caminho_origem)
+
+    # O encode transforma a string (agora com nome e tamanho) em bytes para envio
+    metadados_envio = f"{nome_alvo}|{tamanho_arquivo}"
+    sock.sendto(metadados_envio.encode(), endereco_servidor)
 
     # Abre o arquivo alvo em modo 'rb' 
     with open(caminho_origem, 'rb') as f:
-        print("Enviando pacotes...")
+        print(f"Enviando pacotes ({tamanho_arquivo} bytes)...")
         
         # Lê o primeiro fragmento do arquivo limitando-se ao tamanho do buffer 
         chunk = f.read(BUFFER_SIZE)
@@ -48,33 +52,35 @@ def cliente(host='localhost', port=5000):
             # Lê o próximo fragmento de 1024 bytes
             chunk = f.read(BUFFER_SIZE)
             
-        # Após enviar todo o arquivo, envia um pacote especial com a string em bytes "EOF" 
-        sock.sendto(b"EOF", endereco_servidor)
-
-    # Devolução do servidor
-    
-    # Prepara o caminho e o nome do arquivo onde a resposta do servidor será salva
-    caminho_retorno = os.path.join(DIRETORIO_CLIENTE, f"recebido_do_servidor_{nome_alvo}")
+    # Devolução do servidor 
     
     print("Aguardando devolução do servidor...")
+    
+    # O primeiro pacote recebido do servidor agora contém os metadados da devolução
+    dados_meta, _ = sock.recvfrom(BUFFER_SIZE)
+    nome_retorno, tamanho_retorno_str = dados_meta.decode().split('|')
+    tamanho_retorno = int(tamanho_retorno_str)
+    
+    caminho_retorno = os.path.join(DIRETORIO_CLIENTE, nome_retorno)
     
     # Abre (ou cria) um arquivo em modo 'wb' 
     with open(caminho_retorno, 'wb') as f:
         
-        # Loop infinito aguardando os pacotes que o servidor está mandando de volta
-        while True:
+        bytes_recebidos = 0
+        
+        # Loop aguardando os pacotes baseado no tamanho exato que o servidor informou
+        while bytes_recebidos < tamanho_retorno:
             # Retorna os dados do pacote e o endereço de quem enviou (ignorado)
             data, _ = sock.recvfrom(BUFFER_SIZE)
             
-            # Verifica se o pacote recebido é a nossa flag de término "EOF"
-            if data == b"EOF":
-                break 
-                
-            # Se não for EOF, escreve os bytes recebidos no novo arquivo no disco
+            # Escreve os bytes recebidos no novo arquivo no disco
             f.write(data)
+            
+            # Atualiza o contador de bytes recebidos
+            bytes_recebidos += len(data)
 
     # Informa ao usuário onde o arquivo devolvido e validado foi salvo
-    print(f"Sucesso! Confira o arquivo em: {caminho_retorno}")
+    print(f"Sucesso! {bytes_recebidos} bytes recebidos. Confira o arquivo em: {caminho_retorno}")
     
     # Fecha o socket, liberando a porta e os recursos do sistema operacional
     sock.close()

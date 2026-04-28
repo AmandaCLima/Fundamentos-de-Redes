@@ -26,16 +26,20 @@ def servidor(host='localhost', port=5000):
     while True:
         print("\nPronto para receber novo arquivo...")
         
-        # Bloqueia até chegar o primeiro datagrama — que contém o nome do arquivo
+        # Bloqueia até chegar o primeiro datagrama — que agora contém o nome e o tamanho (ex: "foto.jpg|10245")
         # recvfrom retorna os dados e o endereço (IP, porta) do remetente
         data, addr = sock.recvfrom(BUFFER_SIZE)
         
-        # Decodifica os bytes recebidos para obter o nome do arquivo como string
-        nome_arquivo = data.decode().strip()
+        # Decodifica os bytes recebidos para obter os metadados como string
+        metadados = data.decode().strip()
         
-        # Ignora pacotes vazios e volta ao início do loop
-        if not nome_arquivo:
+        # Ignora pacotes vazios ou que não estejam no padrão "nome|tamanho"
+        if not metadados or '|' not in metadados:
             continue
+        
+        # Separa o nome e o tamanho do arquivo
+        nome_arquivo, tamanho_str = metadados.split('|')
+        tamanho_arquivo = int(tamanho_str)
         
         # Adiciona o prefixo "leilao_" ao nome original para identificar arquivos processados
         nome_final = f"leilao_{nome_arquivo}"
@@ -43,24 +47,31 @@ def servidor(host='localhost', port=5000):
         # Monta o caminho completo onde o arquivo será salvo no disco
         caminho_salvamento = os.path.join(DIRETORIO_STORAGE, nome_final)
         
-        print(f"Recebendo: {nome_arquivo} -> Salvando como: {nome_final}")
+        print(f"Recebendo: {nome_arquivo} ({tamanho_arquivo} bytes) -> Salvando como: {nome_final}")
         
         # Abre (ou cria) o arquivo de destino em modo 'wb' (escrita binária)
         with open(caminho_salvamento, 'wb') as f:
             
-            # Loop de recebimento: lê pacotes até encontrar a flag de término "EOF"
-            while True:
+            bytes_recebidos = 0
+            
+            # Loop de recebimento: lê pacotes até alcançar o tamanho total do arquivo informado
+            while bytes_recebidos < tamanho_arquivo:
                 # Aguarda o próximo datagrama do cliente
                 packet, _ = sock.recvfrom(BUFFER_SIZE)
                 
-                # Verifica se o pacote recebido é a flag de término "EOF"
-                if packet == b"EOF":
-                    break
-                
-                # Caso contrário, escreve o fragmento recebido no arquivo em disco
+                # Escreve o fragmento recebido no arquivo em disco
                 f.write(packet)
+                
+                # Atualiza a contagem de bytes recebidos
+                bytes_recebidos += len(packet)
         
         print(f"Arquivo {nome_final} armazenado. Iniciando devolução...")
+        
+        # Obtém o tamanho do arquivo que será devolvido para avisar o cliente
+        tamanho_retorno = os.path.getsize(caminho_salvamento)
+        
+        # Envia os metadados da devolução (nome e tamanho) antes de começar a enviar os bytes
+        sock.sendto(f"{nome_final}|{tamanho_retorno}".encode(), addr)
         
         # Devolução: relê o arquivo salvo e o envia de volta ao cliente fragmentado
         with open(caminho_salvamento, 'rb') as f:
@@ -75,8 +86,7 @@ def servidor(host='localhost', port=5000):
                 # Lê o próximo fragmento de 1024 bytes
                 chunk = f.read(BUFFER_SIZE)
             
-            # Após enviar todo o arquivo, envia o pacote especial "EOF" sinalizando o fim
-            sock.sendto(b"EOF", addr)
+          
         
         print("Devolução concluída.")
 
