@@ -2,6 +2,12 @@ import socket
 import os
 
 def servidor(host='localhost', port=5000):
+    """Função de Servidor para receber um arquivo via UDP e devolvê-lo ao cliente.
+
+    Args:
+        host (str, optional): Endereço do servidor. Defaults to 'localhost'.
+        port (int, optional): Porta do servidor. Defaults to 5000.
+    """
     
     # Define o limite máximo de bytes por pacote
     BUFFER_SIZE = 1024

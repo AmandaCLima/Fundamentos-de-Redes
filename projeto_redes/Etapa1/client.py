@@ -3,6 +3,12 @@ import os
 
 # Define a função principal do cliente, assumindo localhost e porta 5000 como padrão
 def cliente(host='localhost', port=5000):
+    """Função Cliente para enviar um arquivo via UDP.
+
+    Args:
+        host (str, optional): Endereço do servidor. Defaults to 'localhost'.
+        port (int, optional): Porta do servidor. Defaults to 5000.
+    """
     
     # Define o limite máximo de bytes por pacote 
     BUFFER_SIZE = 1024
