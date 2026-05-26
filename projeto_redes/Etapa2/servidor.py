@@ -1,131 +1,114 @@
 import socket
 import os
+import random
 
-
-# Define o limite máximo de bytes por pacote
 BUFFER_SIZE = 1024
+PROBABILIDADE_PERDA = 0.2
 
+def sendto_com_perda(sock, pkt, addr):
+    if random.random() >= PROBABILIDADE_PERDA:
+        sock.sendto(pkt, addr)
+    else:
+        print("   [!] PERDA SIMULADA (Servidor -> Cliente).")
 
 def make_ack(seq):
-    """Monta um pacote de ACK para a sequência informada.
-
-    Args:
-        seq (int): número de sequência a confirmar (0 ou 1).
-
-    Returns:
-        bytes: pacote no formato b'ACK' + 1 byte de sequência.
-    """
-    # Formato simétrico ao que o cliente espera em extrair_ack()
     return b"ACK" + bytes([seq])
 
+def extrair_ack(resposta):
+    if len(resposta) == 4 and resposta[:3] == b"ACK":
+        return resposta[3]
+    return -1
+
+def rdt_send(sock, dados, seq, endereco, timeout_threshold):
+    pkt = bytes([seq]) + dados
+    sendto_com_perda(sock, pkt, endereco)
+    sock.settimeout(timeout_threshold)
+    
+    while True:
+        try:
+            resposta, _ = sock.recvfrom(BUFFER_SIZE)
+        except socket.timeout:
+            print(f"[TIMEOUT] Retransmitindo pkt seq={seq}...")
+            sendto_com_perda(sock, pkt, endereco)
+            sock.settimeout(timeout_threshold)
+            continue
+
+        ack_seq = extrair_ack(resposta)
+        if ack_seq == seq:
+            sock.settimeout(None)
+            return 1 - seq
 
 def rdt_rcv(sock, seq_esperado):
-    """Recebe UM pacote de forma confiável (FSM do receptor RDT 3.0).
-
-        Args:
-        sock (socket): socket UDP já criado e associado (bind).
-        seq_esperado (int): número de sequência aguardado (0 ou 1).
-
-    Returns:
-        tuple: (payload, addr, prox_esperado), onde payload são os bytes úteis,
-        addr é o endereço do remetente e prox_esperado é o bit já alternado.
-    """
+    sock.settimeout(None)
     while True:
-        # Bloqueia até chegar um datagrama; retorna os dados e o endereço de quem enviou
-        pkt, addr = sock.recvfrom(BUFFER_SIZE)
-
-        # --- parse_pkt: o primeiro byte é a sequência; o restante é o payload ---
+        pkt, addr = sock.recvfrom(BUFFER_SIZE + 1)
         seq = pkt[0]
         payload = pkt[1:]
 
         if seq == seq_esperado:
-            # Pacote esperado: confirma com ACK(seq) e inverte o bit alternado
-            sock.sendto(make_ack(seq), addr)
-            print(f"[RECEBIDO] pkt seq={seq} ({len(payload)} bytes). Enviado ACK {seq}.")
+            sendto_com_perda(sock, make_ack(seq), addr)
             return payload, addr, 1 - seq_esperado
 
-        # Pacote duplicado: o ACK anterior provavelmente se perdeu e o emissor
-        # retransmitiu. Reenvia o ACK daquele pacote e descarta o payload.
-        sock.sendto(make_ack(seq), addr)
-        print(f"[DUPLICADO] pkt seq={seq} (esperava {seq_esperado}). Reenviado ACK {seq}, payload descartado.")
+        sendto_com_perda(sock, make_ack(seq), addr)
 
-
-def servidor(host="localhost", port=5000, buffer_size=BUFFER_SIZE):
-    """Função de Servidor com RDT 3.0.
-
-    Args:
-        host (str, optional): Endereço do servidor. Defaults to "localhost".
-        port (int, optional): Porta do servidor. Defaults to 5000.
-        buffer_size (_type_, optional): Tamanho do buffer de dados. Defaults to BUFFER_SIZE.
-    """
-
-    # Caminho da pasta onde o servidor armazena os arquivos recebidos
+def servidor(host="localhost", port=5000, buffer_size=BUFFER_SIZE, timeout_threshold=2):
     DIRETORIO_STORAGE = os.path.join("Arquivos", "Servidor")
-
-    # Cria o diretório de armazenamento caso ainda não exista
     os.makedirs(DIRETORIO_STORAGE, exist_ok=True)
 
-    # Instancia o socket
-    # SOCK_DGRAM indica uso do protocolo UDP (Datagramas)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-
-    # Associa o socket ao endereço e porta do servidor (bind)
-    # A partir daqui o SO encaminha os datagramas recebidos nessa porta para este socket
     sock.bind((host, port))
-
     print(f"Servidor iniciado em {host}:{port}")
 
-    # Loop principal: o servidor fica ativo indefinidamente, atendendo clientes sequencialmente
     while True:
-        print("\nPronto para receber novo arquivo...")
-
-        # Número de sequência do bit alternado; reinicia a cada novo arquivo,
-        # pois cada cliente começa sua transmissão em 0.
+        print("\n=========================================")
+        print("Pronto para atender novo cliente...")
+        
+        # ==========================================
+        # ETAPA 1: SERVIDOR RECEBE O ARQUIVO
+        # ==========================================
         seq_esperado = 0
-
-        # 1 - Recebe os metadados ("nome|tamanho") de forma confiável.
-        metadados_bytes, addr, seq_esperado = rdt_rcv(sock, seq_esperado)
-        metadados = metadados_bytes.decode().strip()
-
-        # Ignora pacotes vazios ou que não estejam no padrão "nome|tamanho"
-        if not metadados or "|" not in metadados:
+        
+        # Recebe o nome do arquivo
+        nome_bytes, addr_cliente, seq_esperado = rdt_rcv(sock, seq_esperado)
+        nome_original = nome_bytes.decode().strip()
+        
+        if not nome_original:
             continue
-
-        # Separa o nome e o tamanho do arquivo
-        nome_arquivo, tamanho_str = metadados.split("|")
-        tamanho_arquivo = int(tamanho_str)
-
-        # Adiciona o prefixo "leilao_" ao nome original para identificar arquivos processados
-        nome_final = f"leilao_{nome_arquivo}"
-
-        # Monta o caminho completo onde o arquivo será salvo no disco
+            
+        nome_final = f"leilao_{nome_original}"
         caminho_salvamento = os.path.join(DIRETORIO_STORAGE, nome_final)
+        print(f"Recebendo: '{nome_original}' -> Salvando no servidor como: '{nome_final}'")
 
-        print(f"Recebendo: {nome_arquivo} ({tamanho_arquivo} bytes) -> Salvando como: {nome_final}")
-
-        # 2 - Recebe o conteúdo do arquivo, fragmentado e confiável.
-        # Abre (ou cria) o arquivo de destino em modo 'wb' (escrita binária)
         with open(caminho_salvamento, "wb") as f:
-
             bytes_recebidos = 0
-
-            # Loop de recebimento: lê pacotes até alcançar o tamanho total informado
-            while bytes_recebidos < tamanho_arquivo:
-                # rdt_rcv só retorna quando o pacote esperado chega (duplicatas
-                # são tratadas e descartadas internamente).
-                chunk, addr, seq_esperado = rdt_rcv(sock, seq_esperado)
-
-                # Escreve o fragmento recebido no arquivo em disco
+            while True:
+                chunk, addr_cliente, seq_esperado = rdt_rcv(sock, seq_esperado)
+                if not chunk: 
+                    break
                 f.write(chunk)
-
-                # Atualiza a contagem de bytes recebidos
                 bytes_recebidos += len(chunk)
+                
+        print(f"Arquivo armazenado com sucesso ({bytes_recebidos} bytes).")
 
-        print(f"Arquivo {nome_final} armazenado ({bytes_recebidos} bytes).")
+        # ==========================================
+        # ETAPA 2: SERVIDOR DEVOLVE O ARQUIVO RENOMEADO
+        # ==========================================
+        seq_envio = 0
+        print(f"Iniciando devolução para o cliente...")
+        
+        # Avisa o cliente qual será o novo nome do arquivo
+        seq_envio = rdt_send(sock, nome_final.encode(), seq_envio, addr_cliente, timeout_threshold)
 
-        # TODO (próximos passos): devolver o arquivo ao cliente de forma confiável
-        # (FSM do emissor RDT 3.0) e implementar o gerador de perdas de pacotes.
+        # Envia o conteúdo do arquivo renomeado de volta
+        with open(caminho_salvamento, "rb") as f:
+            chunk = f.read(buffer_size)
+            while chunk:
+                seq_envio = rdt_send(sock, chunk, seq_envio, addr_cliente, timeout_threshold)
+                chunk = f.read(buffer_size)
 
+        # Pacote vazio indicando o fim da devolução
+        rdt_send(sock, b"", seq_envio, addr_cliente, timeout_threshold)
+        print("Devolução concluída! Ciclo encerrado.")
 
 if __name__ == "__main__":
     servidor()
