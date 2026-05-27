@@ -10,7 +10,7 @@ def client(host="localhost", port=5000, buffer_size=BUFFER_SIZE, timeout_thresho
     endereco_servidor = (host, port)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
-    rdt = RDT(sock, timeout_threshold=timeout_threshold)
+    rdt = RDT(sock, timeout_threshold=timeout_threshold, origem="Cliente", destino="Servidor")
 
     DIRETORIO_CLIENTE = os.path.join("Arquivos", "Cliente")
     os.makedirs(DIRETORIO_CLIENTE, exist_ok=True)
@@ -28,15 +28,15 @@ def client(host="localhost", port=5000, buffer_size=BUFFER_SIZE, timeout_thresho
     # ==========================================
     seq = 0
     print(f"\n--- INICIANDO ENVIO DO ARQUIVO '{nome_alvo}' ---")
-    seq = rdt.rdt_send(nome_alvo.encode(), seq, endereco_servidor, timeout_threshold)
+    seq = rdt.rdt_send(nome_alvo.encode(), seq, endereco_servidor)
 
     with open(caminho_origem, "rb") as f:
         chunk = f.read(buffer_size)
         while chunk:
-            seq = rdt.rdt_send(chunk, seq, endereco_servidor, timeout_threshold)
+            seq = rdt.rdt_send(chunk, seq, endereco_servidor)
             chunk = f.read(buffer_size)
 
-    seq = rdt.rdt_send(b"", seq, endereco_servidor, timeout_threshold)
+    seq = rdt.rdt_send(b"", seq, endereco_servidor)
     print("Envio concluído. Aguardando a devolução do servidor...")
 
     # ==========================================

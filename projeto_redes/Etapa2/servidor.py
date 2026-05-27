@@ -12,7 +12,7 @@ def servidor(host="localhost", port=5000, buffer_size=BUFFER_SIZE, timeout_thres
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((host, port))
 
-    rdt = RDT(sock, timeout_threshold=timeout_threshold)
+    rdt = RDT(sock, timeout_threshold=timeout_threshold, origem="Servidor", destino="Cliente")
 
     print(f"Servidor iniciado em {host}:{port}")
 
@@ -54,17 +54,17 @@ def servidor(host="localhost", port=5000, buffer_size=BUFFER_SIZE, timeout_thres
         print(f"Iniciando devolução para o cliente...")
         
         # Avisa o cliente qual será o novo nome do arquivo
-        seq_envio = rdt.rdt_send(nome_final.encode(), seq_envio, addr_cliente, timeout_threshold)
+        seq_envio = rdt.rdt_send(nome_final.encode(), seq_envio, addr_cliente)
 
         # Envia o conteúdo do arquivo renomeado de volta
         with open(caminho_salvamento, "rb") as f:
             chunk = f.read(buffer_size)
             while chunk:
-                seq_envio = rdt.rdt_send(chunk, seq_envio, addr_cliente, timeout_threshold)
+                seq_envio = rdt.rdt_send(chunk, seq_envio, addr_cliente)
                 chunk = f.read(buffer_size)
 
         # Pacote vazio indicando o fim da devolução
-        rdt.rdt_send(b"", seq_envio, addr_cliente, timeout_threshold)
+        rdt.rdt_send(b"", seq_envio, addr_cliente)
         print("Devolução concluída! Ciclo encerrado.")
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-import socket 
+import socket
 import random
 
 class RDT:
@@ -8,11 +8,13 @@ class RDT:
 
     BUFFER_SIZE = 1024
 
-    def __init__(self, sock, timeout_threshold=2, probabilidade_perda=0.2):
-        """Inicializa a classe RDT com o socket, o threshold de timeout e a probabilidade de perda de pacotes."""
+    def __init__(self, sock, timeout_threshold=2, probabilidade_perda=0.2, origem="Servidor", destino="Cliente"):
+        """Inicializa a classe RDT com o socket, o threshold de timeout, a probabilidade de perda de pacotes e os rótulos de origem/destino usados nos logs."""
         self.sock = sock
         self.timeout_threshold = timeout_threshold
         self.probabilidade_perda = probabilidade_perda
+        self.origem = origem
+        self.destino = destino
 
 
     def sendto_com_perda(self, pkt, addr):
@@ -20,7 +22,7 @@ class RDT:
         if random.random() >= self.probabilidade_perda:
             self.sock.sendto(pkt, addr)
         else:
-            print("   [!] PERDA SIMULADA (Servidor -> Cliente).")
+            print(f"   [!] PERDA SIMULADA ({self.origem} -> {self.destino}).")
 
     def make_ack(self, seq):
         # O ACK é simplesmente "ACK" seguido do número de sequência do pacote que está sendo reconhecido
@@ -32,12 +34,13 @@ class RDT:
             return resposta[3]
         return -1
 
-    def rdt_send(self, dados, seq, endereco, timeout_threshold, timeout_last_pkt_coef=3):
+    def rdt_send(self, dados, seq, endereco, timeout_last_pkt_coef=3):
         pkt = bytes([seq]) + dados
         print(f"Enviando pkt seq={seq}, bytes={len(dados)}")
         self.sendto_com_perda(pkt, endereco)
-        self.sock.settimeout(timeout_threshold)
-        
+        self.sock.settimeout(self.timeout_threshold)
+
+        timeout_threshold = self.timeout_threshold
         if dados == b"":  # Se for o pacote de finalização, aumenta o timeout para garantir a entrega
             timeout_threshold *= timeout_last_pkt_coef
 
