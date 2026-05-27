@@ -28,10 +28,15 @@ class RDT:
             return resposta[3]
         return -1
 
-    def rdt_send(self, dados, seq, endereco, timeout_threshold):
+    def rdt_send(self, dados, seq, endereco, timeout_threshold, timeout_last_pkt_coef=3):
         pkt = bytes([seq]) + dados
         self.sendto_com_perda(pkt, endereco)
         self.sock.settimeout(timeout_threshold)
+        
+        if dados == b"":  # Se for o pacote de finalização, aumenta o timeout para garantir a entrega
+            timeout_threshold *= timeout_last_pkt_coef
+
+        last_pkt_count = 0
 
         while True:
             try:
@@ -40,12 +45,21 @@ class RDT:
                 print(f"[TIMEOUT] Retransmitindo pkt seq={seq}...")
                 self.sendto_com_perda(pkt, endereco)
                 self.sock.settimeout(timeout_threshold)
+                if dados == b"":  
+                    # Se for o pacote de finalização, conta as tentativas e encerra após um número definido de vezes.
+                    # Isso evita que o servidor fique preso tentando enviar um pacote final que pode ter sido perdido ou
+                    # cliente pode ter fechado a conexão ou não estar mais esperando, então é razoável encerrar após algumas tentativas.
+                    last_pkt_count += 1
+                    if last_pkt_count >= timeout_last_pkt_coef:
+                        print(f"[TIMEOUT] Pacote de finalização seq={seq} não foi reconhecido após {timeout_last_pkt_coef} tentativas. Encerrando tentativa.")
+                        return None
                 continue
 
             ack_seq = self.extrair_ack(resposta)
             if ack_seq == seq:
                 self.sock.settimeout(None)
                 return 1 - seq
+
 
     def rdt_rcv(self, seq_esperado):
         self.sock.settimeout(None)
