@@ -9,21 +9,25 @@ class RDT:
     BUFFER_SIZE = 1024
 
     def __init__(self, sock, timeout_threshold=2, probabilidade_perda=0.2):
+        """Inicializa a classe RDT com o socket, o threshold de timeout e a probabilidade de perda de pacotes."""
         self.sock = sock
         self.timeout_threshold = timeout_threshold
         self.probabilidade_perda = probabilidade_perda
 
 
     def sendto_com_perda(self, pkt, addr):
+        # Simula a perda de pacotes com base na probabilidade definida
         if random.random() >= self.probabilidade_perda:
             self.sock.sendto(pkt, addr)
         else:
             print("   [!] PERDA SIMULADA (Servidor -> Cliente).")
 
     def make_ack(self, seq):
+        # O ACK é simplesmente "ACK" seguido do número de sequência do pacote que está sendo reconhecido
         return b"ACK" + bytes([seq])
 
     def extrair_ack(self, resposta):
+        # Verifica se a resposta é um ACK válido e extrai o número de sequência
         if len(resposta) == 4 and resposta[:3] == b"ACK":
             return resposta[3]
         return -1
@@ -57,7 +61,9 @@ class RDT:
                 continue
 
             ack_seq = self.extrair_ack(resposta)
+            # Verifica se o ACK recebido é para o pacote que foi enviado
             if ack_seq == seq:
+                # ACK correto recebido, alterna o número de sequência para o próximo pacote
                 print(f"ACK OK seq={ack_seq}")
                 self.sock.settimeout(None)
                 return 1 - seq
@@ -71,12 +77,14 @@ class RDT:
     def rdt_rcv(self, seq_esperado):
         self.sock.settimeout(None)
         while True:
+            # O servidor fica bloqueado esperando um pacote do cliente. Quando recebe, verifica o número de sequência.
             pkt, addr = self.sock.recvfrom(self.BUFFER_SIZE + 1)
             seq = pkt[0]
             payload = pkt[1:]
             print(f"Recebido pkt seq={seq}, bytes={len(payload)}, esperado={seq_esperado}")
 
             if seq == seq_esperado:
+                # Pacote esperado recebido, envia ACK e retorna os dados
                 print(f"Enviando ACK seq={seq}")
                 self.sendto_com_perda(self.make_ack(seq), addr)
                 return payload, addr, 1 - seq_esperado
