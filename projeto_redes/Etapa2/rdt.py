@@ -20,7 +20,7 @@ class RDT:
         else:
             print("   [!] PERDA SIMULADA (Servidor -> Cliente).")
 
-    def make_ack(seq):
+    def make_ack(self, seq):
         return b"ACK" + bytes([seq])
 
     def extrair_ack(self, resposta):
