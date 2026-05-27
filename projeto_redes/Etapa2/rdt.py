@@ -30,6 +30,7 @@ class RDT:
 
     def rdt_send(self, dados, seq, endereco, timeout_threshold, timeout_last_pkt_coef=3):
         pkt = bytes([seq]) + dados
+        print(f"Enviando pkt seq={seq}, bytes={len(dados)}")
         self.sendto_com_perda(pkt, endereco)
         self.sock.settimeout(timeout_threshold)
         
@@ -57,8 +58,14 @@ class RDT:
 
             ack_seq = self.extrair_ack(resposta)
             if ack_seq == seq:
+                print(f"ACK OK seq={ack_seq}")
                 self.sock.settimeout(None)
                 return 1 - seq
+
+            if ack_seq == -1:
+                print("ACK invalido/nao-ACK recebido, ignorando")
+            else:
+                print(f"ACK errado seq={ack_seq}, esperado={seq}")
 
 
     def rdt_rcv(self, seq_esperado):
@@ -67,9 +74,12 @@ class RDT:
             pkt, addr = self.sock.recvfrom(self.BUFFER_SIZE + 1)
             seq = pkt[0]
             payload = pkt[1:]
+            print(f"Recebido pkt seq={seq}, bytes={len(payload)}, esperado={seq_esperado}")
 
             if seq == seq_esperado:
+                print(f"Enviando ACK seq={seq}")
                 self.sendto_com_perda(self.make_ack(seq), addr)
                 return payload, addr, 1 - seq_esperado
 
+            print(f"Duplicata seq={seq}, reenviando ACK")
             self.sendto_com_perda(self.make_ack(seq), addr)
